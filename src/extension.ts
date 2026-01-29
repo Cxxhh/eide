@@ -22,6 +22,9 @@
     SOFTWARE.
 */
 
+// IMPORTANT: This must be the first import to set up polyfills before other modules load
+import './polyfill';
+
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -65,9 +68,19 @@ let operationExplorer: OperationExplorer;
 // your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
 
-    // init event emiter
-    RegisterGlobalEvent();
-    RegisterMsgListener();
+    // 最早期的日志，使用 console.log 直接输出到开发者控制台
+    console.log('[EIDE] activate() function called - start');
+
+    try {
+        // init event emiter
+        RegisterGlobalEvent();
+        console.log('[EIDE] RegisterGlobalEvent() done');
+        RegisterMsgListener();
+        console.log('[EIDE] RegisterMsgListener() done');
+    } catch (error) {
+        console.error('[EIDE] Error during early initialization:', error);
+        throw error;
+    }
 
     GlobalEvent.log_info('Embedded IDE launch begin');
 
@@ -99,13 +112,21 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // init eide components
-    const done = await InitComponents(context);
+    GlobalEvent.log_info('InitComponents begin...');
+    let done = false;
+    try {
+        done = await InitComponents(context) || false;
+    } catch (error) {
+        GlobalEvent.log_error(`InitComponents error: ${error}`);
+    }
+    GlobalEvent.log_info(`InitComponents done: ${done}`);
     if (!done) {
-        vscode.window.showErrorMessage(`${ERROR} : Install eide binaries failed !, You can download offline [vsix package](https://github.com/github0null/eide/releases) and install it !`);
-        return;
+        vscode.window.showWarningMessage(`${WARNING} : Install eide binaries failed !, Some features may not work. You can download offline [vsix package](https://github.com/github0null/eide/releases) and install it !`);
+        // 继续注册命令，不要直接返回
     }
 
     // register vscode commands
+    GlobalEvent.log_info('Registering commands...');
     const subscriptions = context.subscriptions;
 
     // global user commands
@@ -137,10 +158,21 @@ export async function activate(context: vscode.ExtensionContext) {
     // TODO
 
     // operations
+    GlobalEvent.log_info('Creating OperationExplorer...');
     operationExplorer = new OperationExplorer(context);
-    subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.Open', () => operationExplorer.OnOpenProject()));
-    subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.Create', () => operationExplorer.OnCreateProject()));
-    subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.Import', () => operationExplorer.OnImportProject()));
+    GlobalEvent.log_info('Registering operation commands...');
+    subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.Open', () => {
+        GlobalEvent.log_info('Command _cl.eide.Operation.Open triggered');
+        operationExplorer.OnOpenProject();
+    }));
+    subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.Create', () => {
+        GlobalEvent.log_info('Command _cl.eide.Operation.Create triggered');
+        operationExplorer.OnCreateProject();
+    }));
+    subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.Import', () => {
+        GlobalEvent.log_info('Command _cl.eide.Operation.Import triggered');
+        operationExplorer.OnImportProject();
+    }));
     subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.SetToolchainPath', () => operationExplorer.OnSetToolchainPath()));
     subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.SetupUtilTools', () => operationExplorer.setupUtilTools()));
     subscriptions.push(vscode.commands.registerCommand('_cl.eide.Operation.openSettings', () => SettingManager.jumpToSettings('@ext:cl.eide')));
@@ -489,8 +521,12 @@ async function checkAndInstallBinaries(forceInstall?: boolean): Promise<boolean>
     const resManager = ResManager.GetInstance();
 
     const binFolder = resManager.GetBinDir();
+    GlobalEvent.log_info(`checkAndInstallBinaries: binFolder = ${binFolder.path}`);
+    GlobalEvent.log_info(`checkAndInstallBinaries: binFolder exists = ${binFolder.IsDir()}`);
+    
     const eideCfg = resManager.getAppConfig<any>();
     const minReqVersion = eideCfg['binary_min_version'];
+    GlobalEvent.log_info(`checkAndInstallBinaries: minReqVersion = ${minReqVersion}`);
 
     // !! for compatibility with offline-package !!
     // if we found eide binaries in plug-in root folder, move it 
@@ -514,6 +550,7 @@ async function checkAndInstallBinaries(forceInstall?: boolean): Promise<boolean>
 
     // if binaries is installed, we need check binaries's version
     else if (checkBinFolder(binFolder)) {
+        GlobalEvent.log_info(`checkAndInstallBinaries: binFolder check passed`);
 
         let localVersion: string | undefined;
 
@@ -522,11 +559,14 @@ async function checkAndInstallBinaries(forceInstall?: boolean): Promise<boolean>
         const verFile = File.fromArray([binFolder.path, 'VERSION']);
         if (verFile.IsFile()) {
             const cont = verFile.Read().trim();
+            GlobalEvent.log_info(`checkAndInstallBinaries: VERSION file content = ${cont}`);
             if (utility.isVersionString(cont)) {
                 localVersion = cont;
                 const mainLocalVersion = parseInt(localVersion.split('.')[0]);
                 const mainMinReqVersion = parseInt(minReqVersion.split('.')[0]);
+                GlobalEvent.log_info(`checkAndInstallBinaries: mainLocalVersion=${mainLocalVersion}, mainMinReqVersion=${mainMinReqVersion}`);
                 if (mainMinReqVersion != mainLocalVersion) { // local Main verson != min Main version
+                    GlobalEvent.log_info(`checkAndInstallBinaries: version mismatch, force update`);
                     localVersion = undefined; // local binaries is invalid, force update
                 }
             }
@@ -1140,11 +1180,16 @@ async function checkAndInstallRuntime() {
 
 async function InitComponents(context: vscode.ExtensionContext): Promise<boolean | undefined> {
 
+    GlobalEvent.log_info('InitComponents: creating managers...');
+    
     // init managers
     const resManager = ResManager.GetInstance(context);
     const settingManager = SettingManager.GetInstance(context);
 
     LogDumper.getInstance();
+
+    GlobalEvent.log_info(`InitComponents: extensionPath = ${context.extensionPath}`);
+    GlobalEvent.log_info(`InitComponents: binDir = ${resManager.GetBinDir().path}`);
 
     // set exec permission for built-in tools
     if (os.platform() != 'win32') {
@@ -1178,7 +1223,9 @@ async function InitComponents(context: vscode.ExtensionContext): Promise<boolean
     }
 
     /* check binaries, if not found, install it ! */
+    GlobalEvent.log_info('InitComponents: checking binaries...');
     const done = await checkAndInstallBinaries();
+    GlobalEvent.log_info(`InitComponents: checkAndInstallBinaries returned ${done}`);
     if (!done) { return false; } /* exit if failed */
 
     // check and install .NET6 runtime

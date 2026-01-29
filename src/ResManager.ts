@@ -44,6 +44,10 @@ import * as yaml from 'yaml';
 import { EncodingConverter } from "./EncodingConverter";
 import { jsonc } from "jsonc";
 
+// NOTE:
+// 避免 x2js.xml2js() 在某些打包/运行环境下退化到 ActiveXObject("Microsoft.XMLDOM") 分支。
+const { DOMParser } = require('xmldom');
+
 let resManager: ResManager | undefined;
 
 // plug-in built-in folders
@@ -550,7 +554,9 @@ export class ResManager extends events.EventEmitter {
                     attributePrefix: '$'
                 });
 
-                const dom = parser.xml2js<any>(file.Read());
+                const xmlText = file.Read();
+                const xmlDom = new DOMParser().parseFromString(xmlText, 'text/xml');
+                const dom = parser.dom2js<any>(xmlDom);
 
                 // compat old DataBase version
                 if (dom.DataBase == undefined && dom.Database) {
@@ -608,7 +614,9 @@ export class ResManager extends events.EventEmitter {
                 attributePrefix: '$'
             });
 
-            const dom = parser.xml2js<any>(file.Read());
+            const xmlText = file.Read();
+            const xmlDom = new DOMParser().parseFromString(xmlText, 'text/xml');
+            const dom = parser.dom2js<any>(xmlDom);
 
             // rm tmp file
             if (devXmlFile.IsFile()) {
