@@ -62,43 +62,6 @@
 
 ---
 
-## 📋 计划功能 / TODO
-
-- [ ] 持续同步原仓库更新
-- [ ] 根据需要添加个人定制功能
-
----
-
-## 🛠️ 与原版的差异
-
-本 Fork 版本以 **F** 后缀标识，表示这是一个分支更新版本。
-
-| 特性 | 原版 EIDE | EIDE-F |
-|------|-----------|--------|
-| 插件后缀 | 无 | F |
-| 维护者 | github0null | Cxxhh |
-| 更新来源 | 原仓库 | 本 Fork + 同步原仓库 |
-
----
-
-## 📚 原项目功能
-
-本 Fork 继承了原版 EIDE 的所有功能：
-
-- 支持 8051、STM8、Cortex-M、MIPS MTI、RISC-V、GCC 项目
-- 支持导入 KEIL5/IAR/Eclipse 项目
-- 支持安装标准 KEIL 芯片支持包（仅 Cortex-M 项目）
-- 提供多种项目模板快速创建项目
-- 构建、重建，支持多种工具链（armcc, gcc-arm-none-eabi, llvm-for-arm, riscv-gcc, keil_c51, sdcc 等）
-- 程序烧录，支持：jlink, stlink, openocd, pyocd 等
-- 使用 Cppcheck 进行静态检查
-- 自动生成调试器插件配置
-- 内置多种实用工具
-
-更多功能详情请参阅 [原项目 README](./README_ORIGINAL.md)
-
----
-
 ## 🚀 快速开始
 
 1. 安装上述任一编译器
