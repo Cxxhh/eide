@@ -44,3 +44,6 @@ test
 
 # shell script
 *.sh
+
+# other projects (not needed in release)
+otherpj
