@@ -603,12 +603,27 @@ export class OperationExplorer {
             // coexist with Keil project ?, if not, auto create EIDE folder in project root
             if (selection === 'No') {
 
-                // Get the parent directory of .uvprojx file's directory (project root)
-                // e.g., if .uvprojx is at "D:/Projects/MyProject/MDK-ARM/project.uvprojx"
-                // orgPrjRoot is "D:/Projects/MyProject/MDK-ARM"
-                // projectRoot will be "D:/Projects/MyProject"
-                // eideFolder will be "D:/Projects/MyProject/EIDE"
-                const projectRoot = new File(NodePath.dirname(orgPrjRoot.path));
+                // Determine the actual project root directory.
+                //
+                // Typical CubeMX/Keil layout:
+                //   <ProjectRoot>/MDK-ARM/<name>.uvprojx
+                // In that case, the project root should be the parent of the uvprojx directory.
+                //
+                // But some projects store <name>.uvprojx directly in the project root folder.
+                // In that case, using the parent directory would be wrong (it may open a huge unrelated folder).
+                //
+                // Heuristic:
+                // - If the uvprojx folder looks like an MDK output folder (e.g. 'MDK-ARM', 'MDK_ARM', 'MDK'),
+                //   we treat its parent as project root.
+                // - Otherwise, treat the uvprojx folder itself as project root.
+                const isMdkOutDirName = (name: string): boolean => {
+                    const n = name.trim().toLowerCase();
+                    return n === 'mdk-arm' || n === 'mdk_arm' || n === 'mdk';
+                };
+
+                const projectRoot = isMdkOutDirName(orgPrjRoot.name)
+                    ? new File(NodePath.dirname(orgPrjRoot.path))
+                    : orgPrjRoot;
                 const eideFolder = File.fromArray([projectRoot.path, 'EIDE']);
 
                 importOption.outDir = eideFolder;

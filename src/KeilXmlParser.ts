@@ -36,6 +36,12 @@ import { ArrayDelRepetition } from '../lib/node-utility/Utility';
 import { CurrentDevice, C51BaseCompileData, ArmBaseCompileData, ARMStorageLayout, ArmBaseCompileConfigModel } from './EIDEProjectModules';
 import * as utility from './utility';
 
+// NOTE:
+// x2js 在某些 webpack 打包场景下可能不会启用内置的 xmldom 分支，
+// 导致 xml2js() 退化到 ActiveXObject("Microsoft.XMLDOM")（IE 兜底）并在 VS Code 扩展宿主中崩溃。
+// 这里显式使用 xmldom 的 DOMParser，再交给 x2js.dom2js()，彻底避免 ActiveXObject。
+const { DOMParser } = require('xmldom');
+
 export interface KeilRteDependence {
     name: string;
     class?: string;
@@ -103,7 +109,9 @@ export abstract class KeilParser<T> {
                 'Project.RTE.files.file.instance'
             ]
         });
-        this.doc = this.parser.xml2js<any>(this._file.Read());
+        const xmlText = this._file.Read();
+        const dom = new DOMParser().parseFromString(xmlText, 'text/xml');
+        this.doc = this.parser.dom2js<any>(dom);
     }
 
     protected getNodeText(node: any): string {

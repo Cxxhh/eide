@@ -3241,13 +3241,21 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
         const selection = await vscode.window.showInformationMessage(
             view_str$operation$import_done, continue_text, cancel_text);
         if (selection === continue_text) {
-            // If workspaceFolder is set, open it as workspace folder (not .code-workspace file)
-            // This allows Git to work properly and EIDE to auto-detect project on restart
-            if (option.workspaceFolder) {
-                WorkspaceManager.getInstance().openWorkspace(option.workspaceFolder);
-            } else {
-                WorkspaceManager.getInstance().openWorkspace(baseInfo.workspaceFile);
+            // Prefer opening the actual project root folder as workspace.
+            //
+            // When user chooses "No" (create an "EIDE" folder), the generated .code-workspace file lives under
+            // <ProjectRoot>/EIDE and by default only contains that folder (path: "."). If VSCode opens that workspace file,
+            // users will see only the EIDE folder in the explorer, which is confusing.
+            //
+            // So:
+            // - If workspaceFolder is provided by the UI flow, open it.
+            // - Otherwise, if we are creating a new "EIDE" folder, open its parent folder as a safe fallback.
+            // - Else, open the generated .code-workspace file.
+            let wsToOpen: File | undefined = option.workspaceFolder;
+            if (!wsToOpen && option.createNewFolder && option.outDir && option.outDir.name.toUpperCase() === 'EIDE') {
+                wsToOpen = new File(option.outDir.dir);
             }
+            WorkspaceManager.getInstance().openWorkspace(wsToOpen || baseInfo.workspaceFile);
         }
     }
 

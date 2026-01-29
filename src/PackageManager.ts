@@ -42,6 +42,10 @@ import { ResManager } from './ResManager';
 import { ExeCmd } from '../lib/node-utility/Executable';
 import { ArrayDelRepetition } from '../lib/node-utility/Utility';
 
+// NOTE:
+// 避免 x2js.xml2js() 在某些打包/运行环境下退化到 ActiveXObject("Microsoft.XMLDOM") 分支。
+const { DOMParser } = require('xmldom');
+
 export enum ComponentUpdateType {
     Disabled = 1,
     Expired
@@ -686,7 +690,9 @@ export class PackageManager {
 
         pdscFile = fList[0];
 
-        let doc: any = this.xmlParser.xml2js(pdscFile.Read());
+        const xmlText = pdscFile.Read();
+        const xmlDom = new DOMParser().parseFromString(xmlText, 'text/xml');
+        let doc: any = this.xmlParser.dom2js(xmlDom);
         let pack = doc.package;
         let packInfo: PackInfo = {
             vendor: pack.vendor,
