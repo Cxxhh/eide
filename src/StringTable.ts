@@ -838,8 +838,8 @@ export const view_str$operation$create_prj_done = [
 ][langIndex];
 
 export const view_str$operation$import_sel_out_folder = [
-    '是否与原有的 KEIL 项目共存于同一目录下，如果选择 "No"，你需要为 EIDE 项目指定存放位置 ！',
-    'Make eide project coexist with the Keil project in the same directory ? If you choose "No", you need to specify a folder to store the eide project !'
+    '是否与原有的 KEIL 项目共存于同一目录下？如果选择 "No"，将自动在项目根目录下创建 "EIDE" 文件夹存放 EIDE 项目文件。',
+    'Make eide project coexist with the Keil project in the same directory ? If you choose "No", an "EIDE" folder will be automatically created in the project root directory to store eide project files.'
 ][langIndex];
 
 export const view_str$operation$create_empty_project = [

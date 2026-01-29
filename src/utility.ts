@@ -333,10 +333,13 @@ export class CppMacroParser {
 
 export function getGccInternalDefines(gccpath: string, cmds: string[] | undefined): CppMacroDefine[] | undefined {
     try {
+        const cwd = NodePath.dirname(gccpath);
+        if (!fs.existsSync(cwd)) return undefined;
+
         // gcc ... -E -dM - <null
         const cmdArgs = (cmds || []).concat(['-E', '-dM', '-', `<${platform.osGetNullDev()}`]);
         const cmdLine = `${gccpath} ` + cmdArgs.join(' ');
-        const outputs = child_process.execSync(cmdLine, { cwd: NodePath.dirname(gccpath) }).toString().split(/\r\n|\n/);
+        const outputs = child_process.execSync(cmdLine, { cwd: cwd }).toString().split(/\r\n|\n/);
         const results: CppMacroDefine[] = [];
 
         outputs.filter((line) => { return line.trim() !== ''; })

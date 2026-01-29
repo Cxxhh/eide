@@ -33,7 +33,7 @@ bin/builder/*.exe.config
 bin/tools/*
 bin_bk
 dotnet-runtime*.exe
-
+otherpj
 # shell script
 /*.sh
 

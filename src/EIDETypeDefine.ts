@@ -77,6 +77,12 @@ export interface ImportOptions {
     projectFile: File;
     createNewFolder?: boolean;
     mdk_prod?: 'c51' | 'arm';
+    /**
+     * The project root directory to open as workspace after import.
+     * If set, VSCode will open this folder directly instead of .code-workspace file.
+     * This is useful when EIDE folder is a subdirectory of the actual project root.
+     */
+    workspaceFolder?: File;
 }
 
 export interface Dependence {

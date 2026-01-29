@@ -1860,6 +1860,8 @@ class AC5 implements IToolchian {
                     }
                 }
 
+                if (!fs.existsSync(armccDir)) return [];
+
                 const cmd = `armcc ${cmdList.join(' ')} --list_macros -E - <${platform.osGetNullDev()}`;
                 child_process.execSync(cmd, { cwd: armccDir, encoding: 'utf8' })
                     .trim().split(/\r\n|\n/)

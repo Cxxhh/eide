@@ -600,23 +600,22 @@ export class OperationExplorer {
                 createNewFolder: false
             };
 
-            // coexist with Keil project ?, if not, redirect output folder
+            // coexist with Keil project ?, if not, auto create EIDE folder in project root
             if (selection === 'No') {
 
-                const folderUri = await vscode.window.showOpenDialog({
-                    openLabel: 'Select',
-                    defaultUri: vscode.Uri.parse(orgPrjRoot.ToUri()),
-                    canSelectFolders: true,
-                    canSelectFiles: false,
-                    canSelectMany: false
-                });
+                // Get the parent directory of .uvprojx file's directory (project root)
+                // e.g., if .uvprojx is at "D:/Projects/MyProject/MDK-ARM/project.uvprojx"
+                // orgPrjRoot is "D:/Projects/MyProject/MDK-ARM"
+                // projectRoot will be "D:/Projects/MyProject"
+                // eideFolder will be "D:/Projects/MyProject/EIDE"
+                const projectRoot = new File(NodePath.dirname(orgPrjRoot.path));
+                const eideFolder = File.fromArray([projectRoot.path, 'EIDE']);
 
-                if (folderUri === undefined || folderUri.length === 0) {
-                    return;
-                }
-
-                importOption.outDir = new File(folderUri[0].fsPath);
+                importOption.outDir = eideFolder;
                 importOption.createNewFolder = true; // we need create a new folder
+                // Set workspace folder to project root so Git works properly
+                // and EIDE can auto-detect the project on restart
+                importOption.workspaceFolder = projectRoot;
             }
 
             // emit event

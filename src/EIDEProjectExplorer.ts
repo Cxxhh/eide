@@ -113,7 +113,7 @@ import {
     isGccFamilyToolchain
 } from './utility';
 import { concatSystemEnvPath, DeleteDir, exeSuffix, kill, osType, DeleteAllChildren, userhome, getGlobalState } from './Platform';
-import { KeilARMOption, KeilC51Option, KeilParser, KeilRteDependence } from './KeilXmlParser';
+import { KeilARMOption, KeilC51Option, KeilParser, KeilRteDependence, ARMParser, C51Parser } from './KeilXmlParser';
 import { VirtualDocument } from './VirtualDocsProvider';
 import { ResInstaller } from './ResInstaller';
 import { ExeCmd, ExecutableOption, ExeFile } from '../lib/node-utility/Executable';
@@ -834,7 +834,10 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
         const workspaceManager = WorkspaceManager.getInstance();
 
         // not a workspace, exit
-        if (workspaceManager.getWorkspaceRoot() === undefined) {
+        // Use hasWorkspaces() instead of getWorkspaceRoot() to support both:
+        // 1. Opening via .code-workspace file
+        // 2. Opening a folder directly (for Git compatibility)
+        if (!workspaceManager.hasWorkspaces()) {
             return;
         }
 
@@ -842,10 +845,28 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
         const validList: File[] = [];
 
         for (const wsDir of wsFolders) {
+            // First, check if the workspace directory itself contains an EIDE project
             const wsList = wsDir.GetList([/.code-workspace$/i], File.EXCLUDE_ALL_FILTER);
             if (wsList.length > 0) {
                 if (detectProject(wsDir)) {
                     validList.push(wsList[0]);
+                    continue; // Found project in current dir, skip subdirectory search
+                }
+            }
+
+            // If no project found in current directory, search in subdirectories
+            // This supports the case where EIDE project is in a subfolder (e.g., 'EIDE' folder)
+            // while user opens the project root as workspace
+            const subDirs = wsDir.GetList(File.EXCLUDE_ALL_FILTER, File.EMPTY_FILTER);
+            for (const subDir of subDirs) {
+                if (!subDir.IsDir()) continue;
+                
+                // Check if this subdirectory contains an EIDE project
+                if (detectProject(subDir)) {
+                    const subWsList = subDir.GetList([/.code-workspace$/i], File.EXCLUDE_ALL_FILTER);
+                    if (subWsList.length > 0) {
+                        validList.push(subWsList[0]);
+                    }
                 }
             }
         }
@@ -3220,7 +3241,13 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
         const selection = await vscode.window.showInformationMessage(
             view_str$operation$import_done, continue_text, cancel_text);
         if (selection === continue_text) {
-            WorkspaceManager.getInstance().openWorkspace(baseInfo.workspaceFile);
+            // If workspaceFolder is set, open it as workspace folder (not .code-workspace file)
+            // This allows Git to work properly and EIDE to auto-detect project on restart
+            if (option.workspaceFolder) {
+                WorkspaceManager.getInstance().openWorkspace(option.workspaceFolder);
+            } else {
+                WorkspaceManager.getInstance().openWorkspace(baseInfo.workspaceFile);
+            }
         }
     }
 
@@ -3429,6 +3456,222 @@ class ProjectDataProvider implements vscode.TreeDataProvider<ProjTreeItem>, vsco
                 WorkspaceManager.getInstance().openWorkspace(prj.GetWorkspaceConfig().GetFile());
             }
         }
+    }
+
+    // ========== Keil Project Refresh Feature ==========
+
+    private keilWatchers: Map<string, vscode.FileSystemWatcher> = new Map();
+
+    public async RefreshKeilProject(element: ProjTreeItem) {
+        const project = this.GetProjectByIndex(element.val.projectIndex);
+        if (!project) return;
+        await this._refreshKeilProjectToConfig(project);
+    }
+
+    private async _refreshKeilProjectToConfig(project: AbstractProject, forceProjectFile?: File) {
+        let projectFile: File | undefined = forceProjectFile;
+        let miscInfo = project.GetConfiguration().config.miscInfo;
+
+        // try get from cache
+        if (!projectFile && miscInfo) {
+            if ((<any>miscInfo).mdk_project_path) {
+                projectFile = new File((<any>miscInfo).mdk_project_path);
+            } else if ((<any>miscInfo).source_project && (<any>miscInfo).source_project.type === 'mdk') {
+                projectFile = new File(project.ToAbsolutePath((<any>miscInfo).source_project.path));
+            }
+        }
+
+        // try search from root
+        if (!projectFile || !projectFile.IsFile()) {
+            const root = project.getProjectRoot();
+            const uvFiles = root.GetList([/\.uvproj[x]?$/i], File.EXCLUDE_ALL_FILTER);
+            if (uvFiles.length === 1) {
+                projectFile = uvFiles[0];
+            } else {
+                // prompt user
+                const items = uvFiles.map(f => ({
+                    label: f.name,
+                    detail: f.path,
+                    file: f
+                }));
+                if (items.length === 0) {
+                    vscode.window.showErrorMessage('No Keil project file found in project root.');
+                    return;
+                }
+                const selected = await vscode.window.showQuickPick(items, {
+                    placeHolder: 'Select Keil project file to refresh from'
+                });
+                if (!selected) return;
+                projectFile = selected.file;
+            }
+        }
+
+        if (!projectFile || !projectFile.IsFile()) {
+            vscode.window.showErrorMessage('Keil project file not found or invalid.');
+            return;
+        }
+
+        try {
+            const isC51 = project.getProjectType() === 'C51' || project.getToolchain().name === 'Keil_C51';
+
+            // Instantiate parser
+            let parser: KeilParser<any>;
+            if (isC51) {
+                parser = new C51Parser(projectFile);
+            } else {
+                parser = new ARMParser(projectFile);
+            }
+
+            const keilProjInfos = parser.ParseData();
+            const keilProjInfo = keilProjInfos.find(i => i.name === project.GetConfiguration().config.name) || keilProjInfos[0];
+
+            if (!keilProjInfo) {
+                throw new Error('No target parsed from project file');
+            }
+
+            // Update project config
+            const prjConfig = project.GetConfiguration();
+
+            // 1. Virtual Folder (Files)
+            const vFolder: VirtualFolder = {
+                name: VirtualSource.rootName,
+                files: [],
+                folders: []
+            };
+
+            const excludeList: string[] = [];
+
+            keilProjInfo.fileGroups.forEach(group => {
+                const childFolder: VirtualFolder = {
+                    name: group.name,
+                    files: [],
+                    folders: []
+                };
+
+                const groupDisabled = group.disabled === true;
+
+                group.files.forEach(f => {
+                    const relPath = project.ToRelativePath(f.file.path) || f.file.path;
+                    childFolder.files.push({ path: relPath });
+
+                    if (groupDisabled || f.disabled) {
+                        excludeList.push(relPath);
+                    }
+                });
+
+                vFolder.folders.push(childFolder);
+            });
+
+            prjConfig.config.virtualFolder = vFolder;
+
+            const curTargetName = project.GetConfiguration().config.mode;
+            const keilTarget = keilProjInfo;
+
+            if (keilTarget) {
+                // Update Target Config
+                const targetConfig = prjConfig.config.targets[curTargetName];
+                if (targetConfig) {
+                    if (targetConfig.cppPreprocessAttrs) {
+                        targetConfig.cppPreprocessAttrs.incList = keilTarget.incList || [];
+                        targetConfig.cppPreprocessAttrs.defineList = keilTarget.defineList || [];
+                    } else {
+                        // Create if missing
+                        targetConfig.cppPreprocessAttrs = {
+                            name: 'Preprocessor',
+                            incList: keilTarget.incList || [],
+                            libList: [],
+                            defineList: keilTarget.defineList || []
+                        };
+                    }
+
+                    // Merge exclude list
+                    targetConfig.excludeList = excludeList;
+                }
+            }
+
+            // Save and reload
+            project.GetConfiguration().Save();
+            project.getVirtualSourceManager().load();
+            project.GetDepManager().Refresh();
+            this.UpdateView();
+
+            vscode.window.showInformationMessage('Project Refreshed from: ' + projectFile.name);
+
+            // Register watcher (force re-register in case path changed)
+            this.registerKeilWatcher(project, projectFile.path, false);
+
+            // Sync Scatter File & Storage Layout (For ARM)
+            if (!isC51) {
+                const armOptions = <any>keilTarget.compileOption;
+                const toolConfig = <any>prjConfig.config.toolchainConfig;
+
+                if (armOptions.scatterFilePath !== undefined) {
+                    // convert to relative path
+                    toolConfig.scatterFilePath = project.ToRelativePath(armOptions.scatterFilePath);
+                }
+
+                if (armOptions.useCustomScatterFile !== undefined) {
+                    toolConfig.useCustomScatterFile = armOptions.useCustomScatterFile;
+                }
+
+                if (armOptions.storageLayout) {
+                    const layout = armOptions.storageLayout;
+                    let isValid = false;
+                    for (const mem of layout.RAM.concat(layout.ROM)) {
+                        if (parseInt(mem.mem.size) > 0) {
+                            isValid = true;
+                            break;
+                        }
+                    }
+                    if (isValid) {
+                        toolConfig.storageLayout = armOptions.storageLayout;
+                    } else {
+                        vscode.window.showWarningMessage('Warning: Invalid memory layout from Keil project. EIDE will ignore it.');
+                    }
+                }
+            }
+
+        } catch (error) {
+            vscode.window.showErrorMessage('Refresh Failed: ' + (<Error>error).message);
+        }
+    }
+
+    private registerKeilWatcher(project: AbstractProject, keilPath: string, skipIfExists: boolean = true) {
+        const uid = project.getUid();
+
+        // If skipIfExists is true and watcher already exists, skip
+        if (skipIfExists && this.keilWatchers.has(uid)) {
+            return;
+        }
+
+        // Clear existing for this project to be safe (if path changed)
+        if (this.keilWatchers.has(uid)) {
+            this.keilWatchers.get(uid)?.dispose();
+            this.keilWatchers.delete(uid);
+        }
+
+        // Normalize path for glob pattern (replace backslashes with forward slashes)
+        const watchPath = keilPath.replace(/\\/g, '/');
+
+        console.log(`[EIDE] Registering Keil Project Watcher: ${watchPath}`);
+
+        const watcher = vscode.workspace.createFileSystemWatcher(watchPath, true, false, true);
+        watcher.onDidChange(async () => {
+            const result = await vscode.window.showInformationMessage(
+                `Detected changes in '${NodePath.basename(keilPath)}'. Do you want to refresh the '${project.GetConfiguration().config.name}' project?`,
+                'Yes', 'No'
+            );
+
+            if (result === 'Yes') {
+                this._refreshKeilProjectToConfig(project);
+            }
+        });
+
+        this.keilWatchers.set(uid, watcher);
+    }
+
+    public registerKeilWatcherForProject(project: AbstractProject, keilPath: string) {
+        this.registerKeilWatcher(project, keilPath);
     }
 }
 
@@ -3945,6 +4188,10 @@ export class ProjectExplorer implements CustomConfigurationProvider {
     Refresh() {
         this.dataProvider.clearTreeViewCache();
         this.dataProvider.UpdateView();
+    }
+
+    RefreshKeilProject(item: ProjTreeItem) {
+        this.dataProvider.RefreshKeilProject(item);
     }
 
     Close(item: ProjTreeItem) {
