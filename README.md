@@ -30,11 +30,18 @@
 **新增功能：**
 - ✨ 添加 **Keil 项目刷新命令** (`Refresh Keil Project`)，支持手动同步 Keil 项目配置
 - ✨ 增强 `EIDEProjectExplorer` 项目管理功能
+- ✨ 支持**子目录项目自动检测**：在工作区子目录中查找 EIDE 项目
+
+**MDK 导入工程优化：**
+- 🚀 **自动创建 EIDE 文件夹**：当选择不与 Keil 项目共存时，自动在项目根目录创建 `EIDE` 文件夹，无需手动选择
+- 🚀 **工作区设置为项目根目录**：导入后打开项目根目录作为工作区（而非 EIDE 子目录），解决以下问题：
+  - ✅ **Git 兼容性**：Git 可以正常工作，识别项目根目录的 `.git`
+  - ✅ **项目自动检测**：VSCode 重启后 EIDE 可自动检测到子目录中的项目
 
 **优化改进：**
 - 🔧 `KeilXmlParser`: 改进 XML 解析逻辑，增强解析稳定性
 - 🔧 `ToolchainManager`: 增加工具链路径有效性检查，防止无效路径导致崩溃
-- 🔧 `OperationExplorer`: 优化操作逻辑
+- 🔧 `OperationExplorer`: 优化 MDK 导入流程
 - 🔧 `utility.ts`: 工具函数优化
 - 🔧 更新 webpack 构建配置
 
