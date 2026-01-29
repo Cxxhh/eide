@@ -106,13 +106,25 @@
 ## 🙏 致谢
 
 - 感谢原作者 [github0null](https://github.com/github0null) 创建了如此优秀的嵌入式开发环境
+- 感谢 [clolckliang](https://github.com/clolckliang) 的 [EIDE-pro](https://github.com/clolckliang/eide-pro) 分支提供的增强功能和 bug 修复参考
 - 感谢原项目的所有贡献者
+
+---
+
+## 🔗 相关分支项目
+
+| 项目 | 维护者 | 说明 |
+|------|--------|------|
+| [EIDE (原版)](https://github.com/github0null/eide) | github0null | 原始项目 |
+| [EIDE-pro](https://github.com/clolckliang/eide-pro) | clolckliang | 增强版，添加 CMake 支持、Keil bug 修复等 |
+| [EIDE-F (本项目)](https://github.com/Cxxhh/eide) | Cxxhh | 个人定制 Fork |
 
 ---
 
 ## 📞 相关链接
 
 - **本 Fork 仓库**: [https://github.com/Cxxhh/eide](https://github.com/Cxxhh/eide)
+- **EIDE-pro 分支**: [https://github.com/clolckliang/eide-pro](https://github.com/clolckliang/eide-pro)
 - **原仓库**: [https://github.com/github0null/eide](https://github.com/github0null/eide)
 - **原项目主页**: [https://em-ide.com](https://em-ide.com)
 - **原项目论坛**: [https://discuss.em-ide.com](https://discuss.em-ide.com)
